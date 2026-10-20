@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+# OmaBoot? Live stand-alone image: the built-in tester, run on tty1 instead of the installer.
+# A placeholder until the boot-live tool exists (S1 step 4): it shows what this Mac is and what
+# the live system found, and saves that to a BOOTLIVE stick when one is plugged in.
+
+set -uo pipefail
+
+# The real tester, when the image carries it. QEMU tests pass a firmware flag
+# (-fw_cfg name=opt/omaboot/auto,string=1) to run it unattended.
+if [[ -x /usr/local/bin/boot-live ]]; then
+  { mkdir -p /run/omaboot && printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "omaboot-live started" >>/run/omaboot/launch; } 2>/dev/null || true # boot.txt's launch times
+  modprobe -q qemu_fw_cfg 2>/dev/null || true
+  if [[ $(cat /sys/firmware/qemu_fw_cfg/by_name/opt/omaboot/auto/raw 2>/dev/null) == 1 ]]; then
+    exec /usr/local/bin/boot-live --auto --edition live
+  fi
+  exec /usr/local/bin/boot-live --edition live
+fi
+
+dmi() { cat "/sys/class/dmi/id/$1" 2>/dev/null || echo unknown; }
+
+renderer() { # the GPU's renderer, else the software one (no render node, e.g. nomodeset or a VM)
+  local platform r
+  for platform in gbm surfaceless; do
+    r=$(eglinfo -B -p "$platform" 2>/dev/null | grep -m1 -i 'renderer' | sed 's/^[^:]*: *//')
+    [[ -n $r ]] && { echo "$r"; return; }
+  done
+  echo "none found"
+}
+
+fixes() { # OmaBoot? fixes that actually took effect on this Mac, not just the ones on the image
+  local on=()
+  # grep reads from a process substitution, not a pipe: with pipefail, grep -q stopping early
+  # would kill dmesg with SIGPIPE and fail the whole check
+  grep -q 'iMac LVDS test: ATOM panel clock' < <(dmesg 2>/dev/null) && on+=("radeon iMac10,1 panel clock")
+  if [[ -e /sys/module/applesmc && -e /sys/class/leds/smc::kbd_backlight ]] &&
+    [[ $(modinfo -n applesmc 2>/dev/null) == */updates/* ]]; then
+    on+=("applesmc keyboard backlight")
+  fi
+  if ((${#on[@]})); then (IFS=,; echo "${on[*]}" | sed 's/,/, /g'); else echo "none (this Mac runs the kernel as Omarchy ships it)"; fi
+}
+
+report() {
+  echo "OmaBoot? Live (stand-alone image, placeholder tester)"
+  echo
+  echo "Mac:      $(dmi product_name) (board $(dmi board_name))"
+  echo "Kernel:   $(uname -r)"
+  echo "Graphics: $(lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display' | sed 's/^[^ ]* //' | paste -sd ';' -)"
+  echo "Renderer: $(renderer)"
+  echo "Memory:   $(awk '/MemTotal/ {printf "%.1f GiB", $2 / 1048576}' /proc/meminfo)"
+  echo "Fixes:    $(fixes)"
+  echo "Built:    $(cat /usr/share/omaboot/build 2>/dev/null || echo unknown)"
+}
+
+out=$(report)
+printf '%s\n' "$out"
+
+if [[ -e /dev/disk/by-label/BOOTLIVE ]]; then
+  mkdir -p /run/bootlive/drive
+  if mount -o rw /dev/disk/by-label/BOOTLIVE /run/bootlive/drive 2>/dev/null; then
+    mkdir -p /run/bootlive/drive/results
+    printf '%s\n' "$out" >"/run/bootlive/drive/results/omaboot-live-$(date -u +%Y%m%dT%H%M%SZ).txt"
+    sync
+    umount /run/bootlive/drive
+    echo
+    echo "Saved to results/ on the BOOTLIVE stick."
+  fi
+fi
+
+echo
+echo "The real tests come with the boot-live tool. This is a shell; type poweroff when done."

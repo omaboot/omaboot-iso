@@ -1,0 +1,96 @@
+#!/bin/bash
+#
+# OmaBoot? Live: a drive labelled BOOTLIVE carrying a tester signed by OmaBoot? runs before the
+# installer, on tty1. Without such a drive this does nothing and the ISO boots as usual.
+#
+# The drive holds `manifest` (sha256sum lines for every file the tester uses), `manifest.sig` (an
+# SSH signature of the manifest, `ssh-keygen -Y sign -n omaboot-bootlive`, by a key listed in
+# /usr/share/omaboot/allowed_signers) and the files themselves, with `run.sh` as the entry point.
+# The manifest and its signature are copied into RAM and checked there; then only the files the
+# manifest lists are copied into RAM, and run from there after their hashes check out, so nothing
+# on the drive can change between the check and the run. The tester writes
+# its results to `results/` on the drive.
+#
+# Runs when a BOOTLIVE drive is present; with boot.live=1 on the kernel command line (the
+# "OmaBoot? Live" boot entry) it also waits up to 30 s for one to be plugged in.
+#
+# Tests: OMABOOT_BOOTLIVE_DIR (a directory instead of a drive), OMABOOT_BOOTLIVE_SIGNERS,
+# OMABOOT_BOOTLIVE_RUN, OMABOOT_BOOTLIVE_REFUSE_PAUSE.
+
+set -uo pipefail
+
+signers=${OMABOOT_BOOTLIVE_SIGNERS:-/usr/share/omaboot/allowed_signers} # overridable for tests
+mnt=/run/bootlive/drive
+run=${OMABOOT_BOOTLIVE_RUN:-/run/bootlive/run}
+by_label=/dev/disk/by-label/BOOTLIVE
+
+say() { printf '%s\n' "$*"; }
+
+# When each launch step happened, in seconds since the kernel started, for boot-live's boot.txt
+# (the Air, 2026-10-17: about 7 s between tty1's autologin and boot-live's start, unaccounted for).
+mark() { { mkdir -p /run/omaboot && printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "$*" >>/run/omaboot/launch; } 2>/dev/null || true; }
+[[ -n ${OMABOOT_BOOTLIVE_DIR:-} ]] || mark "omaboot-bootlive started"
+
+wanted=no
+grep -qw 'boot.live=1' /proc/cmdline 2>/dev/null && wanted=yes
+
+mounted=no
+if [[ -n ${OMABOOT_BOOTLIVE_DIR:-} ]]; then
+  mnt=$OMABOOT_BOOTLIVE_DIR
+else
+  udevadm settle --timeout=10 2>/dev/null || true
+  mark "udevadm settle done"
+  if [[ ! -e $by_label && $wanted == yes ]]; then
+    say "OmaBoot? Live: plug in your OmaBoot? stick (the one labelled BOOTLIVE)."
+    say "Continuing to the Omarchy installer in 30 seconds without it."
+    for _ in $(seq 1 30); do
+      sleep 1
+      udevadm settle --timeout=10 2>/dev/null || true
+      [[ -e $by_label ]] && break
+    done
+  fi
+  [[ -e $by_label ]] || { mark "no BOOTLIVE drive"; exit 1; }
+  mark "BOOTLIVE drive found"
+  mkdir -p "$mnt"
+  mount -o rw "$by_label" "$mnt" || exit 1
+  mounted=yes
+fi
+
+finish() {
+  sync
+  [[ $mounted == yes ]] && umount "$mnt" 2>/dev/null
+  rm -rf "$run"
+  exit "$1"
+}
+
+refuse() {
+  say "OmaBoot? Live: $1"
+  say "Skipping the stick and continuing to the Omarchy installer."
+  sleep ${OMABOOT_BOOTLIVE_REFUSE_PAUSE:-6}
+  finish 1
+}
+
+[[ -f $mnt/manifest && -f $mnt/manifest.sig ]] || refuse "this BOOTLIVE stick has no signed manifest."
+rm -rf "$run" && mkdir -p "$run"
+cp -- "$mnt/manifest" "$run/manifest" && cp -- "$mnt/manifest.sig" "$run/manifest.sig" ||
+  refuse "this BOOTLIVE stick's manifest can't be read."
+ssh-keygen -Y verify -f "$signers" -I omaboot -n omaboot-bootlive -s "$run/manifest.sig" <"$run/manifest" >/dev/null 2>&1 ||
+  refuse "this BOOTLIVE stick isn't signed by OmaBoot?."
+
+# Copy exactly the listed files into RAM, then check them there.
+while read -r hash path; do
+  [[ -n $hash ]] || continue
+  case "$path" in /* | *..* | "" | manifest | manifest.sig | results | results/*) refuse "the manifest names an unsafe path: $path" ;; esac
+  mkdir -p "$run/$(dirname "$path")"
+  cp -- "$mnt/$path" "$run/$path" 2>/dev/null || refuse "a file in the manifest is missing: $path"
+done <"$run/manifest"
+(cd "$run" && sha256sum --check --strict --quiet manifest) >/dev/null 2>&1 ||
+  refuse "a file on this BOOTLIVE stick doesn't match its signed manifest."
+chmod -R u+rwX,go+rX "$run"
+find "$run" -type f -exec chmod 755 {} +
+[[ -f $run/run.sh ]] || refuse "the signed files have no run.sh."
+
+mkdir -p "$mnt/results"
+ln -sfn "$mnt/results" "$run/results"
+(cd "$run" && ./run.sh)
+finish 0

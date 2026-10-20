@@ -1,0 +1,29 @@
+#!/bin/sh
+# omaboot-lid-wake: a systemd-sleep hook (/usr/lib/systemd/system-sleep/) that arms a Mac's lid
+# wake only when the lid is closed. Apple's lid _PSW sets the embedded controller's wake-on-lid-
+# open bit, and Linux calls _PSW(1) before every sleep, so a sleep that starts with the lid open
+# (Suspend from the menu, an idle suspend) is woken by the EC a few seconds in. Before such a
+# sleep this turns the lid's wake off in /proc/acpi/wakeup, and turns it back on after.
+# Macs only. Found and tested with omaboot-spikes/spike-wake (MacBookAir5,2, 2026-10-13).
+[ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = "Apple Inc." ] || exit 0
+lid=$(sed 's/.*\.//' /sys/bus/acpi/devices/PNP0C0D:00/path 2>/dev/null) # "\_SB_.LID0" → LID0
+[ -n "$lid" ] || exit 0
+open() { grep -qs open /proc/acpi/button/lid/*/state; }
+armed() { grep -q "^$lid[[:space:]].*\*enabled" /proc/acpi/wakeup; }
+case "$1" in
+pre)
+  if open && armed; then
+    echo "$lid" >/proc/acpi/wakeup # the file toggles
+    : >/run/omaboot-lid-wake.off
+    echo "omaboot-lid-wake: lid open, $lid wake off for this sleep" >/dev/kmsg
+  fi
+  ;;
+post)
+  if [ -e /run/omaboot-lid-wake.off ]; then
+    armed || echo "$lid" >/proc/acpi/wakeup
+    rm -f /run/omaboot-lid-wake.off
+    echo "omaboot-lid-wake: $lid wake back on" >/dev/kmsg
+  fi
+  ;;
+esac
+exit 0

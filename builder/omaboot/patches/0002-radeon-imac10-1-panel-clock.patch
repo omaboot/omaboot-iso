@@ -1,0 +1,44 @@
+radeon: correct the iMac10,1 LVDS panel clock (108 -> 138.5 MHz)
+
+From github.com/choyer/omarchy-vintage-intel-imac-fix (patches/panel-encoder-combined.patch,
+commit 0d5a406a31). Only changes the driver's RAM copy of LCD_Info for GPU 1002:9488 with
+subsystem 106b:00b6 at 1920x1080 when the ATOM BIOS says 108 MHz and the EDID 138.5 MHz.
+
+--- a/drivers/gpu/drm/radeon/radeon_connectors.c
++++ b/drivers/gpu/drm/radeon/radeon_connectors.c
+@@ -750,6 +750,35 @@
+ 				drm_mode_set_crtcinfo(native_mode, CRTC_INTERLACE_HALVE_V);
+ 				DRM_DEBUG_KMS("Determined LVDS native mode details from EDID\n");
+ 				break;
++			}
++		}
++	}
++
++	/* Experiment: keep this iMac's ATOM transmitter clock consistent with EDID.
++	 * Only changes the driver's RAM copy of LCD_Info; never flashes the ROM.
++	 */
++	{
++		struct radeon_device *rdev = connector->dev->dev_private;
++		u16 size, offset;
++		u8 frev, crev;
++		ATOM_LVDS_INFO_V12 *lcd;
++
++		if (rdev->pdev->device == 0x9488 &&
++		    rdev->pdev->subsystem_vendor == 0x106b &&
++		    rdev->pdev->subsystem_device == 0x00b6 &&
++		    native_mode->hdisplay == 1920 && native_mode->vdisplay == 1080 &&
++		    native_mode->clock == 138500 &&
++		    atom_parse_data_header(rdev->mode_info.atom_context,
++			GetIndexIntoMasterTable(DATA, LVDS_Info),
++			&size, &frev, &crev, &offset) &&
++		    frev == 1 && crev == 2 && size >= sizeof(*lcd)) {
++			lcd = (ATOM_LVDS_INFO_V12 *)(rdev->bios + offset);
++			if (le16_to_cpu(lcd->sLCDTiming.usPixClk) == 10800 &&
++			    lcd->ucLVDS_Misc == 0x4d) {
++				lcd->sLCDTiming.usPixClk = cpu_to_le16(13850);
++				/* RGB888 and FPDI; preserve dual-link/dithering/SS. */
++				lcd->ucLVDS_Misc |= 0x12;
++				DRM_INFO("iMac LVDS test: ATOM panel clock 108000 -> 138500 kHz, RGB888/FPDI enabled\n");
+ 			}
+ 		}
+ 	}

@@ -1,0 +1,28 @@
+# OmaBoot? Live splash: at boot the purple floppy and "OmaBoot? Live" (logo.png) with "Almost
+# done loading…" (waking.png); at shutdown Boot saying goodbye (bye.png) with
+# "Goodbye! Boot is shutting down…" (byeline.png). Images come from make-assets.py; the background
+# is the console's, and plymouth-quit keeps the last frame (omaboot-retain-splash.conf), so the
+# splash stays up until boot-live draws.
+
+Window.SetBackgroundTopColor(0.043, 0.051, 0.063);
+Window.SetBackgroundBottomColor(0.043, 0.051, 0.063);
+
+mode = Plymouth.GetMode();
+down = (mode == "shutdown" || mode == "reboot");
+
+# boot: the purple floppy; shutdown: Boot saying goodbye (bye.png), so the two differ at a glance
+if (down)
+  logo.image = Image("bye.png");
+else
+  logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
+logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2 - 30;
+logo.sprite.SetPosition(logo.x, logo.y, 1);
+
+if (down)
+  line.image = Image("byeline.png");
+else
+  line.image = Image("waking.png");
+line.sprite = Sprite(line.image);
+line.sprite.SetPosition(Window.GetWidth() / 2 - line.image.GetWidth() / 2, logo.y + logo.image.GetHeight() + 32, 1);

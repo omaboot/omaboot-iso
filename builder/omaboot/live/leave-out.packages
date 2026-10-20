@@ -1,0 +1,44 @@
+# Packages the live edition leaves out of the official live system's list (OMABOOT_FLAVOUR=live,
+# builder/build-iso.sh). The live edition has no installer and no rescue toolbox: these are the
+# installer's, disk imaging, VM guest agents, VPN and dial-up clients, network tools, and the
+# accessibility speech and braille daemons (the tester can only be used by looking at the screen;
+# owner, 2026-10-14). Dependencies nothing else needs (Python, Perl's extras) go with them; pacman
+# resolves that, so nothing still installed loses a dependency. The release's difference report
+# explains each (builder/omaboot/release/explain.tsv). nbd stays: the initramfs's PXE hook needs
+# nbd-client to build.
+archinstall
+brltty
+clonezilla
+cloud-init
+darkhttpd
+espeakup
+fsarchiver
+git
+hyperv
+irssi
+lftp
+linux-atm
+linux-firmware-marvell
+livecd-sounds
+lynx
+man-db
+man-pages
+mc
+memtest86+
+memtest86+-efi
+nmap
+open-iscsi
+open-vm-tools
+openconnect
+openvpn
+partclone
+partimage
+pptpclient
+qemu-guest-agent
+reflector
+refind
+sof-firmware
+virtualbox-guest-utils-nox
+vpnc
+wvdial
+xl2tpd

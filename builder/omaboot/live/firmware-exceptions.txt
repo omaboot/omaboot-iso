@@ -1,0 +1,9 @@
+# Firmware a Mac's driver declares but no Mac's chip loads: check-live-image.sh doesn't count these as
+# missing. A driver declares the firmware of every chip it supports, so the check can't tell by itself.
+# MODULE <tab> FIRMWARE PATTERN (shell-style, under usr/lib/firmware/) <tab> WHY
+nouveau	nvidia/tu1*	GSP firmware for Turing (2018) and later; the Macs' NVIDIA GPUs are Tesla to Kepler (GeForce 9400M to GTX 780M), which load none
+nouveau	nvidia/ga1*	GSP firmware for Ampere (2020); no Mac has one
+nouveau	nvidia/ad1*	GSP firmware for Ada (2022); no Mac has one
+nouveau	nvidia/gh1*	firmware for Hopper (2022, data centre); no Mac has one
+nouveau	nvidia/gb1*	firmware for Blackwell (2024); no Mac has one
+nouveau	nvidia/gb2*	firmware for Blackwell (2024); no Mac has one

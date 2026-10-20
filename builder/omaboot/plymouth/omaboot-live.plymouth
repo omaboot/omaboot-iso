@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=OmaBoot? Live
+Description=OmaBoot? Live's boot and shutdown splash: the purple floppy and Boot's line.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/omaboot-live
+ScriptFile=/usr/share/plymouth/themes/omaboot-live/omaboot-live.script
+ConsoleLogBackgroundColor=0x0b0d10

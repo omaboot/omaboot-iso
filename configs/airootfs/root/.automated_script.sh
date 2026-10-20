@@ -11,6 +11,8 @@
 set -euo pipefail
 
 [[ $(tty) == /dev/tty1 ]] || exit 0
+/usr/local/bin/omaboot-bootlive || { [[ -f /usr/share/omaboot/live-image ]] && /usr/local/bin/omaboot-live; } || true # omaboot hook: a signed tester on a BOOTLIVE drive first; the live image's own tester without one
+[[ ! -f /usr/share/omaboot/live-image ]] || exit 0 # omaboot hook: the live image has no installer
 
 # The N1x recovery boot entry is a diagnostic shell, never the installer: record
 # the hardware probe, show how to reach the machine, and leave tty1 at a prompt.

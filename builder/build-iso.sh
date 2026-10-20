@@ -61,6 +61,8 @@ case "$OMARCHY_ISO_REF" in
 esac
 : "${OMARCHY_NVIM_PACKAGE:=omarchy-nvim}"
 export OMARCHY_RUNTIME_PACKAGE OMARCHY_SETTINGS_PACKAGE OMARCHY_NVIM_PACKAGE
+source /builder/omaboot/build-hooks.sh # omaboot hook: OmaBoot? build steps (builder/omaboot/build-hooks.sh)
+omaboot_pins # omaboot hook
 
 # pacman 7 sandboxes its downloads with Landlock and fails every sync on a
 # kernel without it (Namespace's AmpereOne arm64 machines): "restricting
@@ -136,7 +138,7 @@ else
   # so this container can be months behind the mirror it installs from. A plain
   # -Sy install is then a partial upgrade — new packages linked against a glibc
   # the container doesn't have yet.
-  pacman --noconfirm -Syu archiso git sudo base-devel jq grub imagemagick neovim nodejs npm tree-sitter-cli
+  pacman --noconfirm -Syu${OMABOOT_PIN:+u} archiso git sudo base-devel jq grub imagemagick neovim nodejs npm tree-sitter-cli # omaboot hook: pinned builds sync to their archive day exactly (-uu)
   mkarchiso_command=mkarchiso
 fi
 
@@ -313,8 +315,9 @@ if [[ -d /omarchy-source && -d /omarchy-pkgs ]]; then
 fi
 
 # Node.js binary for offline mise install, matched to the target architecture.
-NODE_DIST_URL="https://nodejs.org/dist/latest"
-NODE_SHASUMS=$(curl -fsSL "$NODE_DIST_URL/SHASUMS256.txt")
+if ! omaboot_live_image; then # omaboot hook: the live image has no installer
+NODE_DIST_URL="https://nodejs.org/dist/${NODE_VERSION:-latest}" # omaboot hook: pinned builds take the official ISO's version
+NODE_SHASUMS=$(curl -fsSL "$NODE_DIST_URL/SHASUMS256.txt?t=$(date +%s)") # omaboot hook: past the CDN's cached copy, which can name the previous release for hours
 node_platform=linux-x64
 [[ $OMARCHY_ARCH == aarch64 ]] && node_platform=linux-arm64
 if ! IFS=$'\t' read -r NODE_FILENAME NODE_SHA < <(select_node_release "$node_platform" <<<"$NODE_SHASUMS"); then
@@ -325,6 +328,7 @@ curl -fsSL "$NODE_DIST_URL/$NODE_FILENAME" -o "/tmp/$NODE_FILENAME"
 echo "$NODE_SHA /tmp/$NODE_FILENAME" | sha256sum -c -
 mkdir -p "$build_cache_dir/airootfs/opt/packages/"
 cp "/tmp/$NODE_FILENAME" "$build_cache_dir/airootfs/opt/packages/"
+fi # omaboot hook
 
 # Packages installed into the live ISO environment itself (NOT the target system).
 # The selected omarchy-settings package is needed here so its post_install hook
@@ -535,6 +539,7 @@ mapfile -t all_packages < <(
       -e 's/^apple-bcm-firmware$/apple-bcm-firmware-fetcher/' |
     sort -u
 )
+omaboot_live_packages # omaboot hook
 
 # x86_64: Omarchy's optional list also names firmware for aarch64 boards,
 # which has no x86_64 build. Each exclusion is explicit and printed.
@@ -654,6 +659,7 @@ if [[ -n ${LOCAL_OMARCHY_BUILD:-} ]]; then
   done
 fi
 
+omaboot_live_mirror # omaboot hook
 printf '%s\n' "${required_package_files[@]}" |
   bash /builder/prune-offline-mirror.sh "$offline_mirror_dir"
 
@@ -663,6 +669,7 @@ printf '%s\n' "${required_package_files[@]}" |
 # alone hashes and lists a thousand packages one after another. On aarch64 the
 # mirror also holds the bundle's .pkg.tar.xz archives.
 bash /builder/index-offline-mirror.sh "$offline_mirror_dir"
+omaboot_profile # omaboot hook
 
 # mkarchiso expects the mirror at /var/cache/omarchy/mirror/offline inside the
 # container (the airootfs path); symlink rather than duplicate.
@@ -720,6 +727,7 @@ resolve_expected_packages() {
 # Worth failing the build over: -S --print only aborts when a target is missing
 # from the offline repo, which would fail pacstrap the same way. A count that
 # merely looks wrong is not — the dashboard falls back without the file.
+if ! omaboot_live_image; then # omaboot hook: the live image has no installer to count for
 #
 # One denominator for each default set the installer can pick: the plain one,
 # and on aarch64 each platform's, so a platform whose packages the mirror lacks
@@ -744,12 +752,14 @@ for base_list in "$build_cache_dir"/airootfs/usr/share/omarchy-iso/omarchy-base*
     echo "Target install from ${base_list##*/} resolves to $expected_packages packages."
   fi
 done
+fi # omaboot hook
 
 # Live ISO uses the same offline pacman.conf.
 cp "$build_cache_dir/pacman-offline.conf" "$build_cache_dir/airootfs/etc/pacman.conf"
 
 # Build the ISO. profiledef.sh reads OMARCHY_ARCH for the archiso arch/bootmodes.
 "$mkarchiso_command" -v -w "$build_cache_dir/work/" -o /out/ "$build_cache_dir/"
+omaboot_after_mkarchiso # omaboot hook
 
 # Match host UID/GID on output.
 if [[ -n $HOST_UID && -n $HOST_GID ]]; then

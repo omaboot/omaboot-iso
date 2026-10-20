@@ -1,0 +1,20 @@
+applesmc: get the SMC from the LED with container_of, not drvdata
+
+On top of t2linux patch 3001. applesmc_brightness_set() took
+dev_get_drvdata(led_cdev->dev), but led_cdev->dev is the LED class device,
+whose drvdata is the led_classdev itself. Since the default "nand-disk"
+trigger sets the brightness during led_classdev_register(), every pre-T2 Mac
+with a keyboard-backlight key wrote through a bogus pointer and oopsed in
+probe. The work function already uses container_of; do the same here.
+
+--- a/drivers/hwmon/applesmc.c
++++ b/drivers/hwmon/applesmc.c
+@@ -1467,7 +1467,7 @@
+ static void applesmc_brightness_set(struct led_classdev *led_cdev,
+ 						enum led_brightness value)
+ {
+-	struct applesmc_device *smc = dev_get_drvdata(led_cdev->dev);
++	struct applesmc_device *smc = container_of(led_cdev, struct applesmc_device, backlight_dev);
+ 	int ret;
+ 
+ 	smc->backlight_state[0] = value;

@@ -1,0 +1,101 @@
+# OmaBoot? Live release build, for the public omaboot/omaboot-iso repo on GitHub-hosted runners only
+# (never a self-hosted runner: this repo is public). A v* tag builds the image pinned to the official
+# Omarchy ISO named in builder/omaboot/release/release.env, smoke-tests it in QEMU (nothing is
+# submitted: restricted network), makes the release files and a DRAFT release with the small ones.
+# The ISO stays a workflow artifact (GitHub releases take at most 2 GiB per file; downloads come from
+# R2). The release key is never here: the owner signs SHA256SUMS on the laptop and attaches
+# SHA256SUMS.sig to the draft, then runs publish.yml. See builder/omaboot/release/README.md.
+#
+# Secrets/variables (by name): OMABOOT_REPORT_KEY (secret, doesitomarchy.com source key for boot-live),
+# OMABOOT_REPORT_URL (variable, default https://doesitomarchy.com), OMABOOT_WATCH_URL (variable,
+# default https://boot.watch), OMABOOT_BUG_KEY (secret, the release images' bug report upload key,
+# PF-13; without it a release keeps bug reports on the stick).
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "existing v* tag to (re)build"
+        required: true
+permissions:
+  contents: write # the draft release
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: check the tag
+        run: |
+          [[ $TAG =~ ^v[0-9A-Za-z._-]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0 # the difference report reads the fork's history back to the official commit
+      # (by hand rather than a third-party action: the repo runs GitHub's own actions only)
+      - name: free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force >/dev/null
+          sudo swapoff -a && sudo rm -f /mnt/swapfile
+          df -h /
+      - name: KVM and QEMU
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf mtools dosfstools
+          ls -l /dev/kvm /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_VARS_4M.fd
+          sudo mkdir -p /mnt/omaboot && sudo chown "$(id -u):$(id -g)" /mnt/omaboot
+          df -h / /mnt
+      - name: build, smoke-test, compare
+        env:
+          OMABOOT_REPORT_URL: ${{ vars.OMABOOT_REPORT_URL || 'https://doesitomarchy.com' }}
+          OMABOOT_REPORT_KEY: ${{ secrets.OMABOOT_REPORT_KEY }}
+          OMABOOT_WATCH_URL: ${{ vars.OMABOOT_WATCH_URL || 'https://boot.watch' }}
+          OMABOOT_BUG_KEY: ${{ secrets.OMABOOT_BUG_KEY }}
+          OMABOOT_REQUIRE_TARGET: "1"
+        run: |
+          export OMABOOT_TAG=$TAG OUT=/mnt/omaboot/out OMABOOT_OFFICIAL_CACHE=/mnt/omaboot/official
+          builder/omaboot/release/build.sh
+      - name: keep the ISO (workflow artifact; publish.yml takes it to R2)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: iso-${{ env.TAG }}
+          path: /mnt/omaboot/out/omaboot-live-*.iso
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
+      - name: keep the smoke tests and inventories (also when the build failed)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ env.TAG }}
+          path: |
+            /mnt/omaboot/out/*
+            !/mnt/omaboot/out/*.iso
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: draft release with the small files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /mnt/omaboot/out
+          files=(SHA256SUMS packages.tsv diff-report.md diff-report.tsv.gz smoke-summary.txt boot-live.txt build-info.json build.log)
+          if state=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            [[ $state == true ]] || { echo "$TAG is published already; not touching it"; exit 1; }
+            gh release delete-asset "$TAG" SHA256SUMS.sig --yes 2>/dev/null || true # a rebuild needs a new signature
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --draft --verify-tag --title "OmaBoot? Live $TAG" --notes-file release-notes.md "${files[@]}"
+          fi
+          echo "Draft release $TAG ready. Next: sign SHA256SUMS on the laptop, attach SHA256SUMS.sig, run publish.yml." >>"$GITHUB_STEP_SUMMARY"

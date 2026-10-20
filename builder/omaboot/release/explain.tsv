@@ -1,0 +1,202 @@
+# Why OmaBoot? Live differs from the official Omarchy ISO: the rules the difference report applies
+# (omaboot_release.py diff). AREA <tab> PATTERN <tab> CATEGORY <tab> EXPLANATION, tab-separated.
+# AREA: package (a package the live edition adds), package-removed, iso (ISO 9660 files), esp (the
+# EFI system partition), rootfs (the root file system). PATTERN: shell-style, the first match wins.
+# Files of packages the live edition adds are explained by the package (and its dependencies are
+# found automatically); configs/ changes in the fork are explained by their commits automatically.
+# A difference no rule explains is "unexplained", and a release build fails on it.
+
+# Packages the live edition adds
+package	linux-omarchy	ours	the kernel non-T2 Macs run once Omarchy is installed; GRUB picks it by the SMBIOS model, so a live result comes from the same kernel
+package	mesa	ours	the GPU checks (egl-probe renders with Mesa; the official live system has no GPU stack)
+package	mesa-utils	ours	eglinfo, for the GPU facts in the report
+
+# The tester and what it needs
+rootfs	usr/local/bin/boot-live	ours	the OmaBoot? tester (boot-live, built from its tag: boot-live.txt)
+rootfs	usr/lib/omaboot	ours	the GPU check's helper (egl-probe, compiled in the build against the image's Mesa)
+rootfs	usr/lib/omaboot/*	ours	the GPU check's helper (egl-probe, compiled in the build against the image's Mesa)
+rootfs	usr/share/omaboot	ours	OmaBoot? data: the keys the image trusts (allowed_signers), its name, console fonts, notes on the patched modules, report target
+rootfs	usr/share/omaboot/*	ours	OmaBoot? data: the keys the image trusts (allowed_signers), its name, console fonts, notes on the patched modules, report target
+
+# Patched kernel modules (builder/omaboot/build-modules.sh; the build log shows the unpatched rebuilds matching the official modules)
+rootfs	usr/lib/modules/*/updates	ours	patched kernel modules: applesmc (keyboard backlight oops on pre-T2 Macs) and radeon (iMac10,1 panel clock)
+rootfs	usr/lib/modules/*/updates/*	ours	patched kernel modules: applesmc (keyboard backlight oops on pre-T2 Macs) and radeon (iMac10,1 panel clock)
+rootfs	usr/lib/modules/*/modules.*	generated	depmod's index, rebuilt with the patched modules (and for the added kernel)
+rootfs	etc/modprobe.d/blacklist-applesmc.conf	ours	the official live system blacklists applesmc; the patched module makes it safe, so the blacklist goes
+
+# Boot splash, network, live start
+rootfs	root/.automated_script.sh	ours	tty1's start: on the live image a signed BOOTLIVE stick's tester runs, else the built-in one, instead of the installer (configs/airootfs in the fork)
+rootfs	usr/local/bin/omaboot-bootlive	ours	the BOOTLIVE hook: runs a tester from a stick only when its manifest is signed by a key the image trusts (builder/omaboot/airootfs in the fork)
+rootfs	usr/local/bin/omaboot-live	ours	starts the built-in tester (boot-live) on tty1 (builder/omaboot/airootfs in the fork)
+rootfs	usr/share/plymouth/themes/omaboot-live	ours	the OmaBoot? Live boot splash (builder/omaboot/plymouth)
+rootfs	usr/share/plymouth/themes/omaboot-live/*	ours	the OmaBoot? Live boot splash (builder/omaboot/plymouth)
+rootfs	etc/pacman.d/hooks/60-omaboot-live-splash.hook	ours	selects the OmaBoot? Live splash before the initramfs is built
+rootfs	etc/plymouth/plymouthd.conf	ours	the splash theme: omaboot-live instead of Omarchy's
+rootfs	etc/systemd/system/plymouth-quit.service.d	ours	plymouth-quit keeps the splash's last frame on screen (--retain-splash): no black gap before the tester (builder/omaboot/plymouth/omaboot-retain-splash.conf)
+rootfs	etc/systemd/system/plymouth-quit.service.d/omaboot-retain-splash.conf	ours	plymouth-quit keeps the splash's last frame on screen (--retain-splash): no black gap before the tester (builder/omaboot/plymouth/omaboot-retain-splash.conf)
+rootfs	etc/systemd/network/15-omaboot-tether.network	ours	USB phones and LTE sticks rank between a cable and Wi-Fi (builder/omaboot/network)
+rootfs	usr/lib/systemd/system-sleep/omaboot-lid-wake	ours	sleep hook: on Macs, turns the lid's wake off for a sleep that starts with the lid open, so the sleep tests aren't woken a few seconds in (builder/omaboot/sleep)
+rootfs	etc/mkinitcpio.d/linux-omarchy.preset	ours	the archiso initramfs for the added kernel (a copy of linux-t2's preset)
+rootfs	usr/share/omarchy-iso/expected-packages	ours	the installer's progress denominator: the live edition has no installer
+
+# Written at build time from the installed packages
+rootfs	boot/*	generated	kernel images and initramfs, written at build time (the initramfs carries the OmaBoot? splash)
+rootfs	etc/ld.so.cache	generated	ldconfig's cache of the installed libraries
+rootfs	usr/lib/udev/hwdb.bin	generated	udev's hardware database, compiled at build time
+rootfs	etc/pacman.d/gnupg	generated	pacman's keyring, initialised at build time
+rootfs	etc/pacman.d/gnupg/*	generated	pacman's keyring, initialised at build time (new keys every build)
+rootfs	var/lib/pacman/local/*	generated	pacman's record of the installed packages (with each install's date)
+rootfs	var/lib/pacman/sync/*	generated	pacman's package databases at build time
+rootfs	var/cache/*	generated	caches written at build time
+rootfs	var/log/*	generated	logs written at build time
+rootfs	etc/passwd	generated	system accounts for the installed packages (systemd-sysusers)
+rootfs	etc/group	generated	system accounts for the installed packages (systemd-sysusers)
+rootfs	etc/shadow	generated	system accounts; each carries the day it was made (the build day)
+rootfs	etc/gshadow	generated	system accounts for the installed packages (systemd-sysusers)
+rootfs	etc/passwd-	generated	backup kept by the account tools
+rootfs	etc/group-	generated	backup kept by the account tools
+rootfs	etc/shadow-	generated	backup kept by the account tools; each account carries the build day
+rootfs	etc/gshadow-	generated	backup kept by the account tools
+rootfs	etc/machine-id	generated	written at build time
+rootfs	usr/share/info/dir	generated	the info index of the installed packages
+rootfs	usr/share/glib-2.0/schemas/gschemas.compiled	generated	GLib's schema cache
+rootfs	usr/lib/gdk-pixbuf-2.0/*/loaders.cache	generated	gdk-pixbuf's loader cache
+rootfs	usr/share/icons/*/icon-theme.cache	generated	icon caches
+rootfs	usr/share/mime/*	generated	the MIME database, compiled at build time
+rootfs	usr/lib/locale/locale-archive	generated	compiled locales
+rootfs	etc/ssl/certs/*	generated	the CA bundle, extracted at build time
+rootfs	etc/ca-certificates/extracted/*	generated	the CA bundle, extracted at build time
+rootfs	usr/share/fonts/*/fonts.dir	generated	font indexes
+rootfs	usr/share/fonts/*/fonts.scale	generated	font indexes
+rootfs	usr/lib/gio/modules/giomodule.cache	generated	GIO's module cache
+rootfs	usr/lib/gtk-*/*/immodules.cache	generated	GTK's input-method cache
+rootfs	usr/share/applications/mimeinfo.cache	generated	desktop file index
+rootfs	etc/.pwd.lock	generated	lock file left by the account tools
+rootfs	etc/os-release	generated	mkarchiso writes the image's version (its build date) into it
+rootfs	version	generated	mkarchiso writes the image's version (its build date) here
+rootfs	etc/brlapi.key	generated	brltty's random key, made when the package is installed
+rootfs	etc/iscsi/initiatorname.iscsi	generated	open-iscsi's random initiator name, made when the package is installed
+rootfs	etc/nvme/hostid	generated	nvme-cli's random host ID, made when the package is installed
+rootfs	etc/nvme/hostnqn	generated	nvme-cli's random host NQN, made when the package is installed
+rootfs	usr/share/omarchy-iso/orchestrator/__pycache__	generated	Python bytecode left in the official build machine's checkout by omarchy-iso's unit tests (git ignores it, so it isn't in the sources; a clean checkout has none)
+rootfs	usr/share/omarchy-iso/orchestrator/__pycache__/*	generated	Python bytecode left in the official build machine's checkout by omarchy-iso's unit tests (git ignores it, so it isn't in the sources; a clean checkout has none)
+
+# The ISO volume
+iso	boot/grub/grub.cfg	ours	the OmaBoot? Live menu: its entries (builder/omaboot/grub-live-entries.cfg, the kernel picked by SMBIOS model) in place of the installer's, the OmaBoot? theme (builder/omaboot/grub-head.cfg; builder/omaboot/tools/grub-splice.sh puts both into upstream's grub.cfg at build time)
+iso	boot/*.uuid	generated	archiso's volume ID file, named after the build time (GRUB finds the volume by it)
+iso	boot/grub/themes/omaboot/*	ours	the OmaBoot? GRUB theme (builder/omaboot/grub-theme, assets)
+iso	boot/grub/fonts/omaboot-v*.pf2	ours	the OmaBoot? GRUB fonts (builder/omaboot/assets/grub)
+iso	boot/grub/loopback.cfg	ours	GRUB's loopback menu (the fork's grub configuration)
+iso	arch/boot/x86_64/vmlinuz-linux-omarchy	ours	the added kernel (see package linux-omarchy)
+iso	arch/boot/x86_64/initramfs-linux-omarchy.img	ours	the added kernel's initramfs
+iso	arch/boot/x86_64/initramfs-linux-t2.img	generated	initramfs, built at build time: carries the OmaBoot? splash, xz-compressed, and without the firmware the live edition leaves out
+iso	arch/x86_64/airootfs.sha512	generated	checksum of the root file system image (compared file by file in this report)
+iso	arch/x86_64/airootfs.chunks	ours	SHA-256 of each 1 MiB of airootfs.sfs's first 64 MiB, so the tester's USB read test can check what it reads from the stick (builder/omaboot/tools/chunk-manifest.sh)
+iso	arch/pkglist.x86_64.txt	generated	the list of installed packages (see Packages)
+iso	arch/version	generated	the build date
+iso	arch/grubenv	generated	the build date
+iso	boot/grub/grubenv	generated	the build date
+iso	EFI/BOOT/*.EFI	generated	GRUB, built by mkarchiso for this image (its embedded config names this image's volume)
+iso	boot/syslinux/*	generated	BIOS boot files: mkarchiso and xorriso write this image's volume ID, dates and layout into them
+
+# The EFI system partition
+esp	.VolumeIcon.icns	ours	the startup picker's icon (builder/omaboot/assets/esp)
+esp	EFI/BOOT/.disk_label*	ours	the startup picker's name (builder/omaboot/assets/esp)
+esp	EFI/BOOT/*.EFI	generated	GRUB, built by mkarchiso for this image (its embedded config names this image's volume)
+esp	boot/*	generated	kernels and initramfs copied into the EFI partition by mkarchiso
+esp	shellx64.efi	generated	the UEFI shell, as mkarchiso copies it
+esp	loader/*	generated	written by mkarchiso for this image
+
+# The live edition is smaller than the official live system (owner, 2026-10-14: fit a 2 GB stick; builder/omaboot/live).
+# Packages it leaves out (leave-out.packages); the dependencies only they needed are found automatically.
+package-removed	archinstall	ours	the installer and its tools: the live edition has no installer
+package-removed	reflector	ours	the installer and its tools: the live edition has no installer
+package-removed	git	ours	the installer and its tools: the live edition has no installer
+package-removed	refind	ours	the installer and its tools: the live edition has no installer
+package-removed	clonezilla	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	partclone	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	partimage	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	fsarchiver	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	memtest86+	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	memtest86+-efi	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	mc	ours	disk imaging and recovery tools (a rescue toolbox, not part of testing a Mac)
+package-removed	cloud-init	ours	cloud and VM guest agents (OmaBoot? Live runs on real Macs)
+package-removed	qemu-guest-agent	ours	cloud and VM guest agents (OmaBoot? Live runs on real Macs)
+package-removed	open-vm-tools	ours	cloud and VM guest agents (OmaBoot? Live runs on real Macs)
+package-removed	virtualbox-guest-utils-nox	ours	cloud and VM guest agents (OmaBoot? Live runs on real Macs)
+package-removed	hyperv	ours	cloud and VM guest agents (OmaBoot? Live runs on real Macs)
+package-removed	openconnect	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	openvpn	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	pptpclient	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	vpnc	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	xl2tpd	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	wvdial	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	linux-atm	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	open-iscsi	ours	VPN, dial-up, ATM and iSCSI clients
+package-removed	nmap	ours	network tools and a web server the tester doesn't use
+package-removed	irssi	ours	network tools and a web server the tester doesn't use
+package-removed	lftp	ours	network tools and a web server the tester doesn't use
+package-removed	lynx	ours	network tools and a web server the tester doesn't use
+package-removed	darkhttpd	ours	network tools and a web server the tester doesn't use
+package-removed	brltty	ours	speech and braille: the tester can only be used by looking at the screen (owner, 2026-10-14)
+package-removed	espeakup	ours	speech and braille: the tester can only be used by looking at the screen (owner, 2026-10-14)
+package-removed	livecd-sounds	ours	speech and braille: the tester can only be used by looking at the screen (owner, 2026-10-14)
+package-removed	man-db	ours	manuals: the live edition leaves them out
+package-removed	man-pages	ours	manuals: the live edition leaves them out
+package-removed	linux-firmware-marvell	ours	firmware for hardware no Intel Mac has (Marvell network and Wi-Fi chips; Intel SOF audio DSPs)
+package-removed	sof-firmware	ours	firmware for hardware no Intel Mac has (Marvell network and Wi-Fi chips; Intel SOF audio DSPs)
+# Files the live edition doesn't unpack from the packages it keeps (pacman NoExtract, noextract.conf)
+rootfs	usr/share/locale/*	ours	translations other than English, left out (noextract.conf): the tester carries its own
+rootfs	usr/share/man/*	ours	manuals, left out (noextract.conf)
+rootfs	usr/share/doc/*	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/info/*	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/gtk-doc/*	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/help/*	ours	documentation, left out (noextract.conf)
+rootfs	usr/lib/firmware/intel/iwlwifi*	ours	Intel Wi-Fi firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/intel/sof*	ours	Intel SOF audio firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/intel/ipu*	ours	Intel IPU camera firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/intel/vsc*	ours	Intel vision sensing firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/intel/ish*	ours	Intel sensor hub firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/xe*	ours	Intel Xe graphics (2024 on) firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nvidia/tu1*	ours	NVIDIA Turing (2018 on) GSP firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nvidia/ga1*	ours	NVIDIA Ampere GSP firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nvidia/ad1*	ours	NVIDIA Ada GSP firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nvidia/gh1*	ours	NVIDIA Hopper firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nvidia/gb*	ours	NVIDIA Blackwell firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/ath10k*	ours	Qualcomm Wi-Fi firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/ath11k*	ours	Qualcomm Wi-Fi firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/ath12k*	ours	Qualcomm Wi-Fi firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/dpaa2*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/cxgb4*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/bnx2x*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/ti-connectivity*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/nxp*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/amlogic*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/meson*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+rootfs	usr/lib/firmware/amdnpu*	ours	server, embedded and SoC firmware for hardware no Intel Mac has, left out (noextract.conf; check-live-image.sh proves no Mac's driver needs it)
+# Other live-edition changes
+rootfs	opt/packages	ours	the installer's Node.js tarball (offline mise installs): the live edition has no installer
+rootfs	opt/packages/*	ours	the installer's Node.js tarball (offline mise installs): the live edition has no installer
+rootfs	opt	ours	the installer's Node.js tarball (offline mise installs): the live edition has no installer
+rootfs	etc/systemd/system/cloud-init.target.wants*	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/hv_fcopy_daemon.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/hv_kvp_daemon.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/hv_vss_daemon.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/vboxservice.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/vmtoolsd.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/vmware-vmblock-fuse.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/livecd-talk.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/mkinitcpio.conf.d/archiso.conf	ours	both initramfs images xz-compressed (builder/build-iso.sh)
+rootfs	etc/pacman.conf	ours	the NoExtract lines of the live edition (noextract.conf), as the image was installed with them
+iso	boot/memtest86+	ours	memtest86+, left out with its package (leave-out.packages): a memory tester isn't part of testing a Mac for Omarchy
+iso	boot/memtest86+/*	ours	memtest86+, left out with its package (leave-out.packages): a memory tester isn't part of testing a Mac for Omarchy
+rootfs	usr/share/doc	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/man	ours	manuals, left out (noextract.conf)
+rootfs	usr/share/info	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/gtk-doc	ours	documentation, left out (noextract.conf)
+rootfs	usr/share/help	ours	documentation, left out (noextract.conf)
+rootfs	etc/shells	ours	git-shell's line goes with git (leave-out.packages)
+rootfs	etc/openvpn	ours	OpenVPN's configuration folders, left out with it (leave-out.packages)
+rootfs	etc/openvpn/*	ours	OpenVPN's configuration folders, left out with it (leave-out.packages)
+rootfs	var/lib/BrlAPI	ours	BRLTTY's state folders, left out with it (leave-out.packages)
+rootfs	var/lib/brltty	ours	BRLTTY's state folders, left out with it (leave-out.packages)

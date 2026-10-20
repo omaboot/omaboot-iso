@@ -1,0 +1,14 @@
+# OmaBoot? Live builds only (build-iso.sh puts it in airootfs/etc/pacman.d/hooks, which mkarchiso's
+# pacstrap uses). omarchy-settings' install script writes Omarchy's plymouthd.conf; this switches
+# it to our theme before 90-mkinitcpio-install builds the initramfs, so boot and shutdown both
+# show OmaBoot? Live.
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = omarchy-settings
+
+[Action]
+Description = OmaBoot? Live: boot splash
+When = PostTransaction
+Exec = /usr/bin/sed -i -e "s/^Theme=.*/Theme=omaboot-live/" /etc/plymouth/plymouthd.conf

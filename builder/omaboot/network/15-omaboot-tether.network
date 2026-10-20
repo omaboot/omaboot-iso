@@ -1,0 +1,19 @@
+# OmaBoot?: phones sharing their connection over USB (iPhone ipheth, Android RNDIS/NCM, LTE
+# sticks that are routers) get an address like a cable, but a lower route priority than
+# 20-ethernet.network's 100, so a cable carries the run and boot-live shows the phone as ready;
+# switching to it turns the cable off. Wi-Fi stays at 600 (20-wlan.network).
+
+[Match]
+Driver=ipheth rndis_host cdc_ncm cdc_ether cdc_mbim
+
+[Link]
+RequiredForOnline=routable
+
+[Network]
+DHCP=yes
+
+[DHCPv4]
+RouteMetric=150
+
+[IPv6AcceptRA]
+RouteMetric=150

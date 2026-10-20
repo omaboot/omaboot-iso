@@ -1,0 +1,59 @@
+# OmaBoot? Live: publish a signed draft release (after release.yml and the owner's signature).
+# Refuses unless the draft release carries SHA256SUMS.sig, a valid SSH signature (namespace
+# omaboot-release) by the release key or its offline backup (builder/omaboot/keys). Then checks every
+# file against SHA256SUMS, uploads the release to Cloudflare R2 (current + 2 previous per edition) and
+# publishes the GitHub release. GitHub-hosted runner only. See builder/omaboot/release/README.md.
+#
+# Secrets (by name): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET. The "release"
+# environment can require the owner's approval before the job starts.
+name: publish
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "the v* tag whose draft release to publish"
+        required: true
+permissions:
+  contents: write # publish the release
+  actions: read # fetch the ISO artifact of the release build
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 90
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: check the tag
+        run: |
+          [[ $TAG =~ ^v[0-9A-Za-z._-]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+      # the scripts and the trusted keys as of the branch this runs on (not the tag's)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: refuse without a signature
+        run: |
+          gh release view "$TAG" --json isDraft,assets >release.json
+          jq -e '.isDraft == true' release.json >/dev/null || { echo "$TAG isn't a draft release (published already?)"; exit 1; }
+          jq -e '.assets[] | select(.name == "SHA256SUMS.sig")' release.json >/dev/null ||
+            { echo "$TAG has no SHA256SUMS.sig: sign SHA256SUMS on the laptop and attach it first"; exit 1; }
+      - name: verify the signature and every file
+        run: |
+          mkdir rel
+          gh release download "$TAG" -D rel
+          builder/omaboot/release/verify-sums.sh rel # the signature, and the small files
+          run_id=$(jq -r '.ci.run_id' rel/build-info.json)
+          [[ $run_id =~ ^[0-9]+$ ]] || { echo "build-info.json names no build run"; exit 1; }
+          gh run download "$run_id" -n "iso-$TAG" -D rel
+          builder/omaboot/release/verify-sums.sh --all rel # and the ISO: every file SHA256SUMS lists
+      - name: upload to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: builder/omaboot/release/publish-r2.sh rel "$(jq -r .edition rel/build-info.json)" "$TAG"
+      - name: publish the GitHub release
+        run: gh release edit "$TAG" --draft=false
