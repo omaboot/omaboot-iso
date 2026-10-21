@@ -37,3 +37,14 @@ if [[ -z $NO_CACHE && -z ${OMABOOT_RELEASE:-} ]]; then
   mkdir -p "$OMABOOT_MODULES_CACHE_DIR"
   DOCKER_ARGS+=(-v "$OMABOOT_MODULES_CACHE_DIR:/var/cache/omaboot-modules")
 fi
+
+# The build container's own packages (archiso, git and the rest it installs before it builds),
+# kept between builds on a host with no /var/cache/pacman/pkg for omarchy-iso-make to share (a
+# Debian runner): the Arch archive the build date pins them to can be slow enough to fail a download, and
+# a file kept once never needs it again. pacman checks each kept file against the repo's database
+# as it would a downloaded one. Not for releases (they start clean), nor with --no-cache.
+if [[ -z $NO_CACHE && -z ${OMABOOT_RELEASE:-} && $OMARCHY_ARCH == x86_64 && ! -d /var/cache/pacman/pkg ]]; then
+  OMABOOT_TOOLS_CACHE_DIR="$HOME/.cache/omaboot/pacman-pkg"
+  mkdir -p "$OMABOOT_TOOLS_CACHE_DIR"
+  DOCKER_ARGS+=(-v "$OMABOOT_TOOLS_CACHE_DIR:/var/cache/pacman/pkg")
+fi

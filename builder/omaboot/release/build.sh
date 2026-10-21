@@ -18,7 +18,7 @@
 #   BOOT_LIVE_AUTH          token for cloning a private boot-live repo over HTTP (dry runs only)
 #   OMABOOT_REPORT_URL, OMABOOT_REPORT_KEY   where the image sends reports (target.conf); both or neither.
 #                           Neither: the image saves reports to the stick only.
-#   OMABOOT_REQUIRE_TARGET=1  fail without them (real releases)
+#   OMABOOT_REQUIRE_TARGET=1  fail without them, or with any address but production's (real releases)
 #   OMABOOT_WATCH_URL       the bootwatchd the Wi-Fi and Ethernet tests move their data through
 #                           (target.conf watch=; default https://boot.watch, the production one)
 #   OMABOOT_BUG_KEY         the bug report upload key (target.conf bugkey=; PF-13); without it the
@@ -79,6 +79,14 @@ elif [[ ${OMABOOT_REQUIRE_TARGET:-} == 1 ]]; then
   die "a release needs OMABOOT_REPORT_URL and OMABOOT_REPORT_KEY"
 else
   target="none (dry run: the image saves reports to the stick only)"
+fi
+# A release talks to production only, so a repository variable set by mistake can't send a public
+# image's reports, network tests or bug reports anywhere else; and it sends bug reports.
+if [[ ${OMABOOT_REQUIRE_TARGET:-} == 1 ]]; then
+  [[ ${OMABOOT_REPORT_URL%/} == https://doesitomarchy.com ]] || die "a release reports to https://doesitomarchy.com, not '$OMABOOT_REPORT_URL'"
+  [[ ${OMABOOT_WATCH_URL:-https://boot.watch} == https://boot.watch ]] || die "a release's network tests use https://boot.watch, not '$OMABOOT_WATCH_URL'"
+  [[ -n ${OMABOOT_BUG_KEY:-} ]] || die "a release needs OMABOOT_BUG_KEY"
+  [[ ${OMABOOT_BUG_URL:-https://boot.watch} == https://boot.watch ]] || die "a release's bug reports go to https://boot.watch, not '$OMABOOT_BUG_URL'"
 fi
 
 DOCKER=(docker)
