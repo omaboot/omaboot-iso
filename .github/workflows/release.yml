@@ -87,6 +87,7 @@ jobs:
       - name: draft release with the small files
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # gh runs in the output directory, outside the checkout
         run: |
           cd /mnt/omaboot/out
           files=(SHA256SUMS packages.tsv diff-report.md diff-report.tsv.gz smoke-summary.txt boot-live.txt build-info.json build.log)
