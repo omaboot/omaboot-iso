@@ -251,6 +251,8 @@ omaboot_live_profile() {
   for unit in hv_fcopy_daemon hv_kvp_daemon hv_vss_daemon vboxservice vmtoolsd vmware-vmblock-fuse livecd-talk; do
     rm -f "$build_cache_dir/airootfs/etc/systemd/system/multi-user.target.wants/$unit.service"
   done
+  # No listening network service on a tester: releng starts sshd, and nothing on the live image uses it
+  rm -f "$build_cache_dir/airootfs/etc/systemd/system/multi-user.target.wants/sshd.service"
   mkdir -p "$build_cache_dir/airootfs/usr/share/omaboot"
   touch "$build_cache_dir/airootfs/usr/share/omaboot/live-image"
   # Our boot splash in place of Omarchy's (builder/omaboot/plymouth): the theme, its images for

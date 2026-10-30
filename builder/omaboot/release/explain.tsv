@@ -186,6 +186,7 @@ rootfs	etc/systemd/system/multi-user.target.wants/vboxservice.service	ours	servi
 rootfs	etc/systemd/system/multi-user.target.wants/vmtoolsd.service	ours	services of packages the live edition leaves out (leave-out.packages)
 rootfs	etc/systemd/system/multi-user.target.wants/vmware-vmblock-fuse.service	ours	services of packages the live edition leaves out (leave-out.packages)
 rootfs	etc/systemd/system/multi-user.target.wants/livecd-talk.service	ours	services of packages the live edition leaves out (leave-out.packages)
+rootfs	etc/systemd/system/multi-user.target.wants/sshd.service	ours	no listening network service on a tester: the official live system starts sshd, the live edition doesn't (nothing on it uses sshd)
 rootfs	etc/mkinitcpio.conf.d/archiso.conf	ours	both initramfs images xz-compressed (builder/build-iso.sh)
 rootfs	etc/pacman.conf	ours	the NoExtract lines of the live edition (noextract.conf), as the image was installed with them
 iso	boot/memtest86+	ours	memtest86+, left out with its package (leave-out.packages): a memory tester isn't part of testing a Mac for Omarchy
