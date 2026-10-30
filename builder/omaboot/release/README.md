@@ -54,10 +54,11 @@ published 2026-09-15 21:35 UTC):
 So a release build pins: **Arch packages to archive.archlinux.org/repos/2026/09/07**, and **Omarchy +
 arch-mact2 packages to the official ISO itself** (the pinned repos are made from its package mirror,
 each file checked against `official-packages.tsv`), with the official channel's repo order and
-SigLevels. The databases come from the archive day; package *files* are tried first on
-`stable-mirror.omarchy.org` (pacman 7's `CacheServer`: a fast CDN that serves the same files while it
-stays on that snapshot) and fetched from the archive otherwise. Either way pacman checks each file
-against the archive's checksum and its Arch signature. After the build, every package in the image is checked: if the official ISO has that
+SigLevels. The databases and the package files both come from the archive day, and pacman checks
+each file against the archive's checksum and its Arch signature. (Until 4.0.6-1, files were tried
+first on `stable-mirror.omarchy.org` as pacman 7's `CacheServer`. Once that mirror moved past the
+release's snapshot it answered a missing `.sig` with a 27 KB HTML page, which pacman's 16 KiB
+signature limit turned into a failed download instead of a fall-back to the archive.) After the build, every package in the image is checked: if the official ISO has that
 package, ours must be the very same file (same SHA-256), or the build fails. The official ISO is
 verified by the SHA-256 in the pin (from iso.omarchy.org) and its GPG signature
 (`builder/omarchy.gpg`; the result is in the difference report).

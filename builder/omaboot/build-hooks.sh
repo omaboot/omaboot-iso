@@ -65,13 +65,14 @@ omaboot_pins() {
     if [[ " $PINNED_REPOS " == *" arch-held "* ]]; then
       printf '[arch-held]\nServer = file:///pinned/arch-held\n\n'
     fi
-    # The databases (what gets installed, and each file's checksum) come from the archive day.
-    # Package files are tried first on Omarchy's stable mirror (a CDN; it serves the same files
-    # while it stays on that snapshot), falling back to the archive: pacman checks each against
-    # the archive's checksum and its Arch signature either way. CacheServer needs pacman 7.
+    # The databases (what gets installed, and each file's checksum) and the package files come from
+    # the archive day; pacman checks each file against the archive's checksum and its Arch
+    # signature. Not Omarchy's stable mirror as a CacheServer: once it moves past the release's
+    # snapshot it answers a missing .sig with an HTML page over pacman's 16 KiB signature limit,
+    # and pacman fails the download instead of falling back to the archive.
     for repo in core extra multilib; do
       # shellcheck disable=SC2016 # $repo and $arch are pacman's
-      printf '[%s]\nCacheServer = https://stable-mirror.omarchy.org/$repo/os/$arch\nServer = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n\n' "$repo" "$ARCH_ARCHIVE_DATE"
+      printf '[%s]\nServer = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n\n' "$repo" "$ARCH_ARCHIVE_DATE"
     done
     # the official channel's SigLevel for [arch-mact2]: Never
     printf '[arch-mact2]\nSigLevel = Never\nServer = file:///pinned/arch-mact2\n'
@@ -251,6 +252,8 @@ omaboot_live_profile() {
   for unit in hv_fcopy_daemon hv_kvp_daemon hv_vss_daemon vboxservice vmtoolsd vmware-vmblock-fuse livecd-talk; do
     rm -f "$build_cache_dir/airootfs/etc/systemd/system/multi-user.target.wants/$unit.service"
   done
+  # No listening network service on a tester: releng starts sshd, and nothing on the live image uses it
+  rm -f "$build_cache_dir/airootfs/etc/systemd/system/multi-user.target.wants/sshd.service"
   mkdir -p "$build_cache_dir/airootfs/usr/share/omaboot"
   touch "$build_cache_dir/airootfs/usr/share/omaboot/live-image"
   # Our boot splash in place of Omarchy's (builder/omaboot/plymouth): the theme, its images for
